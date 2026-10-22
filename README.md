@@ -7,17 +7,6 @@ It is inspired by [MIN](https://github.com/min-protocol/min), but **it is not
 wire-compatible with MIN 2.0**. Do not use Wirelet as a drop-in replacement for
 MIN.
 
-## Features
-
-- C99, C++11+ and Python 3.10+ implementations.
-- 16-bit frame IDs and 16-bit frame types.
-- Payloads from 0 to 65535 bytes.
-- CRC-32 protection against accidental corruption.
-- Byte stuffing for reliable frame delimiting.
-- Non-blocking byte-oriented state machine.
-- No OS dependencies.
-- No dynamic allocation in the C and C++ implementations; buffers are provided
-  by the caller.
 
 Wirelet is a framing layer, not a complete transport. It does not provide
 acknowledgements, retransmission, flow control, addressing, authentication or
@@ -48,11 +37,11 @@ value of `0xFFFFFFFF`, and a final XOR with `0xFFFFFFFF`.
 The frame body is escaped so that the preamble and end marker remain
 unambiguous:
 
-- After every two consecutive `AA` bytes in the body, insert a `55` byte.
-- On receive, after seeing two consecutive `AA` bytes, skip a following `55`
+- After every two consecutive `0xAA` bytes in the body, insert a `0x55` byte.
+- On receive, after seeing two consecutive `0xAA` bytes, skip a following `0x55`
   byte.
-- The 3-byte preamble and the final `55` end marker are sent unescaped.
-- The CRC covers the unescaped values, and the stuffed `55` bytes are not part
+- The 3-byte preamble and the final `0x55` end marker are sent unescaped.
+- The CRC covers the unescaped values, and the stuffed `0x55` bytes are not part
   of the CRC.
 
 For example, the body bytes
@@ -73,7 +62,7 @@ AA AA 55
 - The C and C++ receivers discard a frame if its declared payload length is
   larger than the supplied RX buffer.
 - The Python receiver discards a frame if its length is larger than
-  `max_frame_len` (default `0xFFFF`).
+  `max_frame_len` (default 65535).
 - A frame with an invalid CRC is discarded.
 - After a discarded frame, the receiver looks for the next preamble and
   resynchronizes.
@@ -81,11 +70,47 @@ AA AA 55
 ## Repository layout
 
 ```text
-c/       C implementation
-cpp/     C++ implementation
-py/      Python implementation
-protocol.txt
-LICENSE
+c/        C implementation
+cpp/      C++ implementation
+py/       Python implementation
+tests/    cross-language test suite
+Makefile  build and test targets
+LICENSE   MIT license
+```
+
+## Building
+
+The included `Makefile` builds static libraries for both implementations:
+
+| Target | Description |
+|--------|-------------|
+| `make` or `make all` | Build both libraries (default target) |
+| `make libs` | Same as `make all` |
+| `make c` | Build only `build/libwirelet.a` |
+| `make cpp` | Build only `build/libwireletcpp.a` |
+| `make test` | Build both libraries and run the full test suite |
+| `make check` | Alias for `make test` |
+| `make clean` | Remove build outputs and Python caches |
+| `make help` | Show targets and configurable variables |
+
+The generated libraries are:
+
+- `build/libwirelet.a` — C implementation.
+- `build/libwireletcpp.a` — C++ implementation, including the CRC-32 code
+  compiled as C.
+
+Link an application against a library with:
+
+```bash
+cc -std=c99 -I c app.c build/libwirelet.a -o app_c
+c++ -std=c++17 -I cpp app.cpp build/libwireletcpp.a -o app_cpp
+```
+
+The Makefile honors `CC`, `CXX`, `AR`, `PYTHON`, `BUILD_DIR`, `CFLAGS`,
+`CXXFLAGS`, and `CPPFLAGS`:
+
+```bash
+make CC=clang CXX=clang++ -j
 ```
 
 ## Usage
@@ -192,8 +217,8 @@ static void on_frame(uint16_t id, uint16_t type,
 
 static wirelet::Handler link(
     on_frame,
-    nullptr,                         // send_bytes
     uart_write_byte,                 // send_byte
+    nullptr,                         // send_bytes
     rx_buf, static_cast<uint32_t>(sizeof rx_buf),
     nullptr, 0);                     // tx_buf, tx_buf_len
 
@@ -250,13 +275,6 @@ link.send_frame(0x0001, 0x0002, b"hello")
 link.poll_bytes(b"".join(sent))
 ```
 
-For a real serial port, replace `sent.append` with a function that writes the
-encoded bytes to the port, and feed received bytes into `poll_byte()` or
-`poll_bytes()`.
-
-Python 3.10 or newer is required because the implementation uses structural
-pattern matching.
-
 ## API summary
 
 | Operation      | C                          | C++                     | Python                  |
@@ -284,14 +302,6 @@ C and C++ implementations prefer the buffered `send_bytes` path when a TX
 buffer is available, except for very small buffers where they fall back to
 `send_byte`.
 
-The argument order differs slightly between the implementations:
-
-| Language | Configuration order |
-|----------|---------------------|
-| C        | `context, frame_handler, send_byte, send_bytes, rx_buf, rx_buf_len, tx_buf, tx_buf_len` |
-| C++      | `frame_handler, send_bytes, send_byte, rx_buf, rx_buf_len, tx_buf, tx_buf_len` |
-| Python   | `frame_handler, send_byte, send_bytes, max_frame_len=0xFFFF` |
-
 `send_byte` is called once per encoded byte. In C and C++, `send_bytes` is a
 chunk callback and may be called multiple times per frame; in Python,
 `send_bytes` receives the complete encoded frame as one `bytes` object. In
@@ -301,6 +311,58 @@ Callbacks are synchronous. Keep them short, especially when calling the
 handler from an interrupt context. The implementations are not thread-safe;
 use one handler per link and serialize access if multiple threads or interrupt
 contexts can reach it.
+
+## Testing
+
+The test suite requires Python 3, a C99 compiler, and a C++17 compiler. `make`
+is optional if you run the Python runner directly.
+
+Run everything from the repository root:
+
+```bash
+make test
+```
+
+`make test` builds the static libraries first and then runs the cross-language
+suite. You can also run the runner directly:
+
+```bash
+python3 tests/run_tests.py
+```
+
+To select different compilers, either pass Makefile variables or set the
+environment variables used by the runner:
+
+```bash
+make CC=clang CXX=clang++ test
+CC=clang CXX=clang++ python3 tests/run_tests.py
+```
+
+### Test layout
+
+| Path | Purpose |
+|------|---------|
+| `tests/reference.py` | Independent Python reference codec, deterministic frame vectors, and resynchronization scenarios. |
+| `tests/vector_io.h` | Shared binary vector-file reader used by the C and C++ tests. |
+| `tests/test_c.c` | C tests for encoding, decoding, configuration validation, CRC, buffer limits, and maximum payloads. |
+| `tests/test_cpp.cpp` | C++ tests for the same areas, including release-mode configuration checks. |
+| `tests/test_python.py` | Python `unittest` suite for encoding, loopback, resynchronization, limits, reset, and configuration. |
+| `tests/run_tests.py` | Builds the C/C++ tests with warnings as errors, runs the Python tests, and compares all three implementations. |
+| `tests/build/` | Generated vectors and test binaries; ignored by Git. |
+
+The suite covers:
+
+- Encoding against an independent reference codec, including byte-stuffing
+  boundaries and `0xAA` values in frame fields and payloads.
+- Byte-oriented and buffered TX paths across multiple TX buffer sizes.
+- Clean streams decoded with RX limits of 64, 256, 4096, and 65535 bytes.
+- Resynchronization after bad CRC, truncated frames, missing end markers,
+  oversized declared lengths, preamble noise, and back-to-back frames.
+- The maximum 65535-byte payload, including heavy byte-stuffing expansion.
+- Python constructor validation, reset behavior, loopback, and `max_frame_len`
+  enforcement.
+- Cross-language compatibility: C, C++, and Python must encode the same vectors
+  and agree on every decoded stream.
 
 ## Limitations
 

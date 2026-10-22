@@ -29,7 +29,7 @@
 
 #include "wirelet.hpp"
 #include "wirelet_crc32.h"
-#include <cassert>
+#include <assert.h>
 
 
 #define HEADER_BYTE 0xAA
@@ -38,8 +38,8 @@
 
 
 wirelet::Handler::Handler(wirelet::handle_frame frame_handler,
-                          wirelet::send_bytes send_bytes,
                           wirelet::send_byte send_byte,
+                          wirelet::send_bytes send_bytes,
                           uint8_t *rx_buf,
                           uint32_t rx_buf_len,
                           uint8_t *tx_buf,
@@ -48,7 +48,7 @@ wirelet::Handler::Handler(wirelet::handle_frame frame_handler,
         tx_buf(tx_buf), tx_buf_len(tx_buf_len),
         frame_handler_(frame_handler), send_byte_(send_byte), send_bytes_(send_bytes)
 {
-        // buf/len mismatch — это всегда баг вызывающего, ловим в debug
+        // buf/len mismatch
         assert(!(rx_buf == nullptr && rx_buf_len != 0)
                && "wirelet::Handler: rx_buf is null but rx_buf_len != 0");
         assert(!(tx_buf == nullptr && tx_buf_len != 0)
@@ -62,14 +62,12 @@ wirelet::Handler::Handler(wirelet::handle_frame frame_handler,
                 (tx_buf != nullptr && tx_buf_len != 0))
                && "wirelet::Handler: send_bytes is set but tx_buf/tx_buf_len are invalid");
 
-        // хотя бы один путь (RX или TX) должен быть работоспособен
         bool rx_ok = (frame_handler != nullptr && rx_buf != nullptr && rx_buf_len != 0);
         bool tx_bytes_ok = (send_bytes != nullptr && tx_buf != nullptr && tx_buf_len != 0);
         bool tx_byte_ok = (send_byte != nullptr);
         assert((rx_ok || tx_bytes_ok || tx_byte_ok)
                && "wirelet::Handler: no valid RX or TX path");
 
-        // В release assert не работает, поэтому дублируем проверку в valid_
         rx_valid_ = rx_ok;
         tx_valid_ = !(tx_buf == nullptr && tx_buf_len != 0) && (tx_byte_ok || tx_bytes_ok);
 
@@ -77,7 +75,7 @@ wirelet::Handler::Handler(wirelet::handle_frame frame_handler,
 }
 
 void wirelet::Handler::reset()
-{       
+{
         rx_frame_state = STATE_HEADER;
         rx_frame_id    = 0;
         rx_frame_type  = 0;
@@ -111,7 +109,7 @@ void wirelet::Handler::_send_stuffed(uint32_t *crc, uint8_t *header_count, uint8
 
 void wirelet::Handler::_send_frame_byte(uint16_t frame_id,
                             uint16_t frame_type,
-                            uint16_t frame_len, 
+                            uint16_t frame_len,
                             const uint8_t *frame)
 {
         uint8_t header_count = 0;
@@ -150,7 +148,7 @@ void wirelet::Handler::_tx_buf_add_byte_stuffed(uint32_t *crc, uint8_t *header_c
 {
         if (crc != nullptr)
                 wirelet_crc32_step(crc, byte);
-        
+
         _tx_buf_add_byte(byte);
 
         // add stuff byte only if seen 2 header bytes
@@ -179,7 +177,7 @@ void wirelet::Handler::_tx_buf_add_byte(uint8_t byte)
 
 void wirelet::Handler::_send_frame_bytes(uint16_t frame_id,
                                    uint16_t frame_type,
-                                   uint16_t frame_len, 
+                                   uint16_t frame_len,
                                    const uint8_t *frame)
 {
         uint8_t header_count = 0;
@@ -203,7 +201,7 @@ void wirelet::Handler::_send_frame_bytes(uint16_t frame_id,
         for (uint16_t i = 0; i < frame_len; i++) {
                 _tx_buf_add_byte_stuffed(&crc, &header_count, frame[i]);
         }
-        
+
         wirelet_crc32_finalize(&crc);
         _tx_buf_add_byte_stuffed(nullptr, &header_count, (crc >> 24) & 0xff);
         _tx_buf_add_byte_stuffed(nullptr, &header_count, (crc >> 16) & 0xff);
@@ -222,12 +220,12 @@ void wirelet::Handler::_send_frame_bytes(uint16_t frame_id,
 
 bool wirelet::Handler::send_frame(uint16_t frame_id,
                             uint16_t frame_type,
-                            uint16_t frame_len, 
+                            uint16_t frame_len,
                             const uint8_t *frame)
-{       
+{
         if (!is_tx_valid())
                 return false;
-        
+
         // buf/len mismatch
         if (frame == nullptr && frame_len != 0)
                 return false;
@@ -247,7 +245,7 @@ bool wirelet::Handler::send_frame(uint16_t frame_id,
                 _send_frame_byte(frame_id, frame_type, frame_len, frame);
                 return true;
         }
-        
+
         return false;
 }
 
@@ -258,7 +256,7 @@ void wirelet::Handler::poll_byte(uint8_t byte)
 }
 
 void wirelet::Handler::_poll_byte_unchecked(uint8_t byte)
-{       
+{
         if (rx_header_bytes_seen == 2) {
                 rx_header_bytes_seen = 0;
                 if (byte == HEADER_BYTE) {
@@ -283,7 +281,7 @@ void wirelet::Handler::_poll_byte_unchecked(uint8_t byte)
         switch (rx_frame_state) {
         case STATE_HEADER:
                 break;
-                
+
         case STATE_ID0:
                 rx_frame_id = (uint16_t)byte << 8;
                 rx_frame_state = STATE_ID1;
@@ -354,19 +352,20 @@ void wirelet::Handler::_poll_byte_unchecked(uint8_t byte)
                         rx_frame_state = STATE_END;
                 } else {
                         rx_frame_state = STATE_HEADER;
+                        rx_header_bytes_seen = 0;
                 }
                 break;
 
         case STATE_END:
                 if (byte == END_BYTE && frame_handler_ != nullptr)
                         frame_handler_(rx_frame_id, rx_frame_type,
-                                       rx_frame_len, rx_frame_buf);
+                                      rx_frame_len, rx_frame_buf);
                 rx_frame_state = STATE_HEADER;
         }
 }
 
 bool wirelet::Handler::poll_bytes(const uint8_t *bytes, uint32_t bytes_len)
-{              
+{
         if (!is_rx_valid())
                 return false;
 

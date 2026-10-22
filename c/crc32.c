@@ -29,11 +29,7 @@
 
 #include "wirelet_crc32.h"
 #include <stdint.h>
-
-#ifndef NULL
-#define NULL ((void*)0)
-#endif // NULL
-
+#include <stddef.h>
 
 void wirelet_crc32_init(uint32_t *crc)
 {
@@ -57,7 +53,7 @@ void wirelet_crc32_step(uint32_t *crc_p, uint8_t byte)
         *crc_p = crc;
 }
 
-void wirelet_crc32_step_bytes(uint32_t *crc_p, uint8_t *bytes, uint32_t bytes_len)
+void wirelet_crc32_step_bytes(uint32_t *crc_p, const uint8_t *bytes, uint32_t bytes_len)
 {
         if (crc_p == NULL)
                 return;

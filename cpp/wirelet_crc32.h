@@ -40,7 +40,7 @@ void wirelet_crc32_init(uint32_t *crc);
 
 void wirelet_crc32_step(uint32_t *crc, uint8_t byte);
 
-void wirelet_crc32_step_bytes(uint32_t *crc, uint8_t *bytes, uint32_t bytes_len);
+void wirelet_crc32_step_bytes(uint32_t *crc, const uint8_t *bytes, uint32_t bytes_len);
 
 void wirelet_crc32_finalize(uint32_t *crc);
 

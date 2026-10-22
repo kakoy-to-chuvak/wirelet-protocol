@@ -31,7 +31,7 @@
 #define WIRELET_HPP
 
 
-#include <cstdint>
+#include <stdint.h>
 
 namespace wirelet {
 enum State {
@@ -60,7 +60,7 @@ class Handler {
 private:
         State rx_frame_state = STATE_HEADER;
         uint8_t *rx_frame_buf  = nullptr;
-        uint32_t rx_buf_offset = 0; 
+        uint32_t rx_buf_offset = 0;
         uint32_t rx_buf_len    = 0;
         uint16_t rx_frame_id   = 0;
         uint16_t rx_frame_type = 0;
@@ -85,7 +85,7 @@ private:
 
         void _send_frame_byte(uint16_t frame_id,
                               uint16_t frame_type,
-                              uint16_t frame_len, 
+                              uint16_t frame_len,
                               const uint8_t *frame);
 
         void _tx_buf_add_byte_stuffed(uint32_t *crc, uint8_t *header_count, uint8_t byte);
@@ -94,34 +94,34 @@ private:
 
         void _send_frame_bytes(uint16_t frame_id,
                                uint16_t frame_type,
-                               uint16_t frame_len, 
+                               uint16_t frame_len,
                                const uint8_t *frame);
-        
+
         void _poll_byte_unchecked(uint8_t byte);
-        
+
 public:
-        Handler(wirelet::handle_frame _frame_handler,
-                wirelet::send_bytes _send_bytes,
-                wirelet::send_byte _send_byte,
-                uint8_t *_rx_buf,
-                uint32_t _rx_buf_len,
-                uint8_t *_tx_buf,
-                uint32_t _tx_buf_len);
-        
+        Handler(wirelet::handle_frame frame_handler,
+                wirelet::send_byte send_byte,
+                wirelet::send_bytes send_bytes,
+                uint8_t *rx_buf,
+                uint32_t rx_buf_len,
+                uint8_t *tx_buf,
+                uint32_t tx_buf_len);
+
         bool is_valid() const noexcept { return tx_valid_ || rx_valid_; }
         bool is_tx_valid() const noexcept { return tx_valid_; }
         bool is_rx_valid() const noexcept { return rx_valid_; }
 
         void reset();
-        
-        bool send_frame(uint16_t _frame_id,
-                        uint16_t _frame_type,
-                        uint16_t _frame_len, 
-                        const uint8_t *_frame);
 
-        void poll_byte(uint8_t _byte);
+        bool send_frame(uint16_t frame_id,
+                        uint16_t frame_type,
+                        uint16_t frame_len,
+                        const uint8_t *frame);
 
-        bool poll_bytes(const uint8_t *_bytes, uint32_t _bytes_len);
+        void poll_byte(uint8_t byte);
+
+        bool poll_bytes(const uint8_t *bytes, uint32_t bytes_len);
 };
 }
 

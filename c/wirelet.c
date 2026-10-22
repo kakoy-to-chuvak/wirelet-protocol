@@ -31,11 +31,7 @@
 #include "wirelet.h"
 #include <stdbool.h>
 #include <stdint.h>
-
-
-#ifndef NULL
-#define NULL ((void*)0)
-#endif // NULL
+#include <stddef.h>
 
 
 #define HEADER_BYTE 0xAA
@@ -53,7 +49,7 @@ bool wirelet_context_init(struct wirelet_context *context,
 {
         if (context == NULL)
                 return false;
-        
+
         bool rx_ok = frame_handler != NULL && rx_buf != NULL && rx_buf_len != 0;
         bool tx_ok = send_byte != NULL || (send_bytes != NULL && tx_buf != NULL && tx_buf_len != 0);
 
@@ -124,7 +120,7 @@ static void _send_stuffed(wirelet_send_byte send, uint32_t *crc,
 static void _send_frame_byte(struct wirelet_context *context,
                              uint16_t frame_id,
                              uint16_t frame_type,
-                             uint16_t frame_len, 
+                             uint16_t frame_len,
                              const uint8_t *frame)
 {
         wirelet_send_byte send = context->send_byte;
@@ -160,7 +156,7 @@ static void _send_frame_byte(struct wirelet_context *context,
 }
 
 static void _tx_buf_add_byte(struct wirelet_context *context, uint8_t byte)
-{       
+{
         context->tx_buf[context->tx_buf_offset] = byte;
         context->tx_buf_offset++;
 
@@ -173,10 +169,10 @@ static void _tx_buf_add_byte(struct wirelet_context *context, uint8_t byte)
 
 static void _tx_buf_add_byte_stuffed(struct wirelet_context *context, uint32_t *crc,
                                      uint8_t *header_count, uint8_t byte)
-{       
+{
         if (crc != NULL)
                 wirelet_crc32_step(crc, byte);
-        
+
         _tx_buf_add_byte(context, byte);
 
         // add stuff byte only if seen 2 header bytes
@@ -194,7 +190,7 @@ static void _tx_buf_add_byte_stuffed(struct wirelet_context *context, uint32_t *
 static void _send_frame_bytes(struct wirelet_context *context,
                               uint16_t frame_id,
                               uint16_t frame_type,
-                              uint16_t frame_len, 
+                              uint16_t frame_len,
                               const uint8_t *frame)
 {
         uint8_t header_count = 0;
@@ -218,7 +214,7 @@ static void _send_frame_bytes(struct wirelet_context *context,
         for (uint16_t i = 0; i < frame_len; i++) {
                 _tx_buf_add_byte_stuffed(context, &crc, &header_count, frame[i]);
         }
-        
+
         wirelet_crc32_finalize(&crc);
         _tx_buf_add_byte_stuffed(context, NULL, &header_count, (crc >> 24) & 0xff);
         _tx_buf_add_byte_stuffed(context, NULL, &header_count, (crc >> 16) & 0xff);
@@ -237,7 +233,7 @@ static void _send_frame_bytes(struct wirelet_context *context,
 bool wirelet_send_frame(struct wirelet_context *context,
                     uint16_t frame_id,
                     uint16_t frame_type,
-                    uint16_t frame_len, 
+                    uint16_t frame_len,
                     const uint8_t *frame)
 {
         if (context == NULL || (frame == NULL && frame_len != 0))
@@ -258,7 +254,7 @@ bool wirelet_send_frame(struct wirelet_context *context,
                 _send_frame_byte(context, frame_id, frame_type, frame_len, frame);
                 return true;
         }
-        
+
         return false;
 }
 
@@ -266,7 +262,7 @@ void wirelet_poll_byte(struct wirelet_context *context, uint8_t byte)
 {
         if (context == NULL)
                 return;
-        
+
         if (context->rx_header_bytes_seen == 2) {
                 context->rx_header_bytes_seen = 0;
                 if (byte == HEADER_BYTE) {
@@ -291,7 +287,7 @@ void wirelet_poll_byte(struct wirelet_context *context, uint8_t byte)
         switch (context->rx_frame_state) {
         case WIRELET_STATE_HEADER:
                 break;
-                
+
         case WIRELET_STATE_ID0:
                 context->rx_frame_id = (uint16_t)byte << 8;
                 context->rx_frame_state = WIRELET_STATE_ID1;
@@ -357,11 +353,12 @@ void wirelet_poll_byte(struct wirelet_context *context, uint8_t byte)
                 break;
         case WIRELET_STATE_CRC3:
                 context->rx_frame_crc |= (uint32_t)byte;
-                wirelet_crc32_finalize(&context->rx_crc);               
+                wirelet_crc32_finalize(&context->rx_crc);
                 if (context->rx_crc == context->rx_frame_crc) {
                         context->rx_frame_state = WIRELET_STATE_END;
                 } else {
                         context->rx_frame_state = WIRELET_STATE_HEADER;
+                        context->rx_header_bytes_seen = 0;
                 }
                 break;
 

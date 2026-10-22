@@ -50,17 +50,6 @@ class State(IntEnum):
     END     = 12
 
 class Handler:
-    rx_frame_state: State = State.HEADER
-    rx_frame_buf: bytearray = bytearray()
-    rx_frame_id: int = 0
-    rx_frame_type: int = 0
-    rx_frame_len: int = 0
-    rx_frame_crc: int = 0
-    rx_header_bytes_seen: int = 0
-
-    tx_buf: bytearray = bytearray()
-    tx_header_bytes_seen: int = 0
-
     def __init__(self, frame_handler, send_byte, send_bytes, max_frame_len = 0xFFFF):
         if frame_handler is None and send_byte is None and send_bytes is None:
             raise ValueError("wirelet.Handler: no valid RX or TX path")
@@ -71,7 +60,16 @@ class Handler:
 
         self.max_frame_len = max_frame_len
 
-        self.reset()
+        self.rx_frame_state: State = State.HEADER
+        self.rx_frame_buf: bytearray = bytearray()
+        self.rx_frame_id: int = 0
+        self.rx_frame_type: int = 0
+        self.rx_frame_len: int = 0
+        self.rx_frame_crc: int = 0
+        self.rx_header_bytes_seen: int = 0
+
+        self.tx_buf: bytearray = bytearray()
+        self.tx_header_bytes_seen: int = 0
 
     def reset(self):
         self.rx_frame_state = State.HEADER
@@ -89,17 +87,20 @@ class Handler:
         if self.send_bytes is None and self.send_byte is None:
             return False
 
+        if len(frame) > 65535:
+            return False
+
         raw = (frame_id.to_bytes(2, 'big')
            + frame_type.to_bytes(2, 'big')
            + len(frame).to_bytes(2, 'big')
-           + frame)
+           + bytes(frame))
         crc = crc32(raw) & 0xFFFFFFFF
 
         self.tx_buf = bytearray()
         self.tx_header_bytes_seen = 0
         self._tx_buf_add_bytes_stuffed(raw)
         self._tx_buf_add_bytes_stuffed(crc.to_bytes(4, 'big'))
-        
+
         out = bytearray([HEADER_BYTE, HEADER_BYTE, HEADER_BYTE])
         out += self.tx_buf
         out.append(END_BYTE)
@@ -132,67 +133,67 @@ class Handler:
         else:
             self.rx_header_bytes_seen = 0
 
-        match self.rx_frame_state:
-            case State.ID0:
-                self.rx_frame_id = byte << 8
-                self.rx_frame_state = State.ID1
-            case State.ID1:
-                self.rx_frame_id |= byte
-                self.rx_frame_state = State.TYPE0
+        if self.rx_frame_state == State.ID0:
+            self.rx_frame_id = byte << 8
+            self.rx_frame_state = State.ID1
+        elif self.rx_frame_state == State.ID1:
+            self.rx_frame_id |= byte
+            self.rx_frame_state = State.TYPE0
 
-            case State.TYPE0:
-                self.rx_frame_type = byte << 8
-                self.rx_frame_state = State.TYPE1
-            case State.TYPE1:
-                self.rx_frame_type |= byte
-                self.rx_frame_state = State.LEN0
+        elif self.rx_frame_state == State.TYPE0:
+            self.rx_frame_type = byte << 8
+            self.rx_frame_state = State.TYPE1
+        elif self.rx_frame_state == State.TYPE1:
+            self.rx_frame_type |= byte
+            self.rx_frame_state = State.LEN0
 
-            case State.LEN0:
+        elif self.rx_frame_state == State.LEN0:
                 self.rx_frame_len = byte << 8
                 self.rx_frame_state = State.LEN1
-            case State.LEN1:
-                self.rx_frame_len |= byte
-                self.rx_frame_buf = bytearray()
-                if self.rx_frame_len == 0:
-                    self.rx_frame_state = State.CRC0
-                elif self.rx_frame_len > self.max_frame_len:
-                    self.rx_frame_state = State.HEADER
-                    self.rx_header_bytes_seen = 0
-                else:
-                    self.rx_frame_state = State.PAYLOAD
+        elif self.rx_frame_state == State.LEN1:
+            self.rx_frame_len |= byte
+            self.rx_frame_buf = bytearray()
+            if self.rx_frame_len == 0:
+                self.rx_frame_state = State.CRC0
+            elif self.rx_frame_len > self.max_frame_len:
+                self.rx_frame_state = State.HEADER
+                self.rx_header_bytes_seen = 0
+            else:
+                self.rx_frame_state = State.PAYLOAD
 
-            case State.PAYLOAD:
-                self.rx_frame_buf.append(byte)
-                if len(self.rx_frame_buf) == self.rx_frame_len:
-                    self.rx_frame_state = State.CRC0
+        elif self.rx_frame_state == State.PAYLOAD:
+            self.rx_frame_buf.append(byte)
+            if len(self.rx_frame_buf) == self.rx_frame_len:
+                self.rx_frame_state = State.CRC0
 
-            case State.CRC0:
-                self.rx_frame_crc = byte << 24
-                self.rx_frame_state = State.CRC1
-            case State.CRC1:
-                self.rx_frame_crc |= byte << 16
-                self.rx_frame_state = State.CRC2
-            case State.CRC2:
-                self.rx_frame_crc |= byte << 8
-                self.rx_frame_state = State.CRC3
-            case State.CRC3:
-                self.rx_frame_crc |= byte
-                self.rx_frame_crc &= 0xFFFFFFFF
-                crc = crc32(
-                    self.rx_frame_id.to_bytes(2, 'big') +
-                    self.rx_frame_type.to_bytes(2, 'big') +
-                    self.rx_frame_len.to_bytes(2, 'big') +
-                    self.rx_frame_buf
-                )
-                if crc == self.rx_frame_crc:
+        elif self.rx_frame_state == State.CRC0:
+            self.rx_frame_crc = byte << 24
+            self.rx_frame_state = State.CRC1
+        elif self.rx_frame_state == State.CRC1:
+            self.rx_frame_crc |= byte << 16
+            self.rx_frame_state = State.CRC2
+        elif self.rx_frame_state == State.CRC2:
+            self.rx_frame_crc |= byte << 8
+            self.rx_frame_state = State.CRC3
+        elif self.rx_frame_state == State.CRC3:
+            self.rx_frame_crc |= byte
+            self.rx_frame_crc &= 0xFFFFFFFF
+            crc = crc32(
+                self.rx_frame_id.to_bytes(2, 'big') +
+                self.rx_frame_type.to_bytes(2, 'big') +
+                self.rx_frame_len.to_bytes(2, 'big') +
+                self.rx_frame_buf
+            )
+            if crc == self.rx_frame_crc:
                     self.rx_frame_state = State.END
-                else:
-                    self.rx_frame_state = State.HEADER
+            else:
+                self.rx_frame_state = State.HEADER
+                self.rx_header_bytes_seen = 0
 
-            case State.END:
-                if byte == END_BYTE and self.handle_frame is not None:
-                    self.handle_frame(self.rx_frame_id, self.rx_frame_type, bytes(self.rx_frame_buf))
-                self.rx_frame_state = State.HEADER           
+        elif self.rx_frame_state == State.END:
+            if byte == END_BYTE and self.handle_frame is not None:
+                self.handle_frame(self.rx_frame_id, self.rx_frame_type, bytes(self.rx_frame_buf))
+            self.rx_frame_state = State.HEADER
 
         return True
 

@@ -60,7 +60,7 @@ typedef void (*wirelet_send_bytes)(uint8_t *bytes, uint32_t bytes_len);
 struct wirelet_context {
         enum wirelet_state rx_frame_state;
         uint8_t *rx_frame_buf;
-        uint32_t rx_buf_offset; 
+        uint32_t rx_buf_offset;
         uint32_t rx_buf_len;
         uint16_t rx_frame_id;
         uint16_t rx_frame_type;
@@ -79,26 +79,26 @@ struct wirelet_context {
 };
 
 
-bool wirelet_context_init(struct wirelet_context *_context,
-                      wirelet_handle_frame _frame_handler,
-                      wirelet_send_byte _send_byte,
-                      wirelet_send_bytes _send_bytes,
-                      uint8_t *_rx_buf,
-                      uint32_t _rx_buf_len,
-                      uint8_t *_tx_buf,
-                      uint32_t _tx_buf_len);
+bool wirelet_context_init(struct wirelet_context *context,
+                      wirelet_handle_frame frame_handler,
+                      wirelet_send_byte send_byte,
+                      wirelet_send_bytes send_bytes,
+                      uint8_t *rx_buf,
+                      uint32_t rx_buf_len,
+                      uint8_t *tx_buf,
+                      uint32_t tx_buf_len);
 
-bool wirelet_context_reset(struct wirelet_context *_context);
+bool wirelet_context_reset(struct wirelet_context *context);
 
-bool wirelet_send_frame(struct wirelet_context *_context,
-                    uint16_t _frame_id,
-                    uint16_t _frame_type,
-                    uint16_t _frame_len, 
-                    const uint8_t *_frame);
+bool wirelet_send_frame(struct wirelet_context *context,
+                    uint16_t frame_id,
+                    uint16_t frame_type,
+                    uint16_t frame_len,
+                    const uint8_t *frame);
 
-void wirelet_poll_byte(struct wirelet_context *_context, uint8_t _byte);
+void wirelet_poll_byte(struct wirelet_context *context, uint8_t byte);
 
-bool wirelet_poll_bytes(struct wirelet_context *_context, const uint8_t *_bytes, uint32_t _bytes_len);
+bool wirelet_poll_bytes(struct wirelet_context *context, const uint8_t *bytes, uint32_t bytes_len);
 
 
 #ifdef __cplusplus
